@@ -23,7 +23,7 @@ function RegisterIPContent() {
   const searchParams = useSearchParams();
   const initialParent = searchParams.get('parent') || '';
 
-  const { account, signer, provider, readOnlyProvider, connectWallet } = useWallet();
+  const { account, signer, provider, readOnlyProvider, connectWallet, currentAccount, connectAccountByIndex } = useWallet();
 
   const [file, setFile] = useState(null);
   const [fileHash, setFileHash] = useState('');
@@ -105,11 +105,16 @@ function RegisterIPContent() {
         setIsDuplicate(true);
         setDuplicateInfo({
           creator: result.creator,
-          timestamp: new Date(Number(result.timestamp) * 1000).toLocaleString(),
+          owner: result.owner,
+          timestamp: new Date(Number(result.timestamp) * 1000).toLocaleString('en-US', {
+            dateStyle: 'full',
+            timeStyle: 'medium'
+          }),
           version: Number(result.version),
-          ipfsURI: result.ipfsURI
+          ipfsURI: result.ipfsURI,
+          licenseTerms: result.licenseTerms
         });
-        setStatusMessage('⚠️ DUPLICATE DETECTED: This file hash has already been registered on-chain.');
+        setStatusMessage('🛡️ DUPLICATE CLAIM DETECTED: This file content is already registered and protected on-chain.');
       } else {
         setIsDuplicate(false);
         setDuplicateInfo(null);
@@ -135,8 +140,8 @@ function RegisterIPContent() {
     e.preventDefault();
 
     if (!file) return alert('Please select a file to register.');
-    if (!account || !signer) return alert('Please connect your MetaMask wallet.');
-    if (isDuplicate) return alert('Cannot register: this file hash is already registered in the system.');
+    if (!account || !signer) return alert('Please select an active account identity in the top navbar or connect a wallet.');
+    if (isDuplicate) return alert('Cannot register: this file content is already registered and protected on the blockchain.');
     if (!licenseTerms.trim()) return alert('Please specify license terms.');
     if (isRevision && !parentHash.trim()) return alert('Please provide the parent version hash.');
 
@@ -244,23 +249,28 @@ function RegisterIPContent() {
             />
           </div>
 
-          {/* Duplicate Detection Alert */}
+          {/* Blockchain Duplicate Claim Collision Alert */}
           {isDuplicate && duplicateInfo && (
-            <div style={{ background: 'rgba(244, 63, 94, 0.1)', border: '1px solid rgba(244, 63, 94, 0.4)', borderRadius: 'var(--radius-md)', padding: '1.25rem', marginBottom: '1.5rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--danger)', fontWeight: 700, marginBottom: '0.5rem' }}>
-                <span>⚠️</span> Duplicate Claim Collision Detected!
+            <div style={{ background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.45)', borderRadius: 'var(--radius-md)', padding: '1.5rem', marginBottom: '1.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#f87171', fontWeight: 800, fontSize: '1.05rem', marginBottom: '0.6rem' }}>
+                <span style={{ fontSize: '1.3rem' }}>🛡️</span> BLOCKCHAIN IP PROTECTION TRIGGERED: DUPLICATE BLOCKED
               </div>
-              <p style={{ fontSize: '0.875rem', color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
-                This exact file has already been registered on the blockchain. The protocol enforces originality by preventing duplicate hash collisions.
+              <p style={{ fontSize: '0.9rem', color: 'var(--text-primary)', marginBottom: '0.85rem', lineHeight: 1.5 }}>
+                The cryptographic SHA-256 fingerprint of this file matches an intellectual property asset already anchored in the immutable smart contract ledger. 
+                The protocol prevents unauthorized duplicate registration to safeguard original authorship.
               </p>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                <div><strong>Original Registrant:</strong> {duplicateInfo.creator}</div>
-                <div><strong>Registration Date:</strong> {duplicateInfo.timestamp}</div>
-                <div><strong>Version:</strong> {duplicateInfo.version}</div>
+              <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.35)', padding: '0.85rem', borderRadius: 'var(--radius-sm)', display: 'grid', gap: '0.4rem', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div><strong>Original Author / Creator:</strong> <span className="hash-pill">{duplicateInfo.creator}</span></div>
+                <div><strong>Current Titleholder (Owner):</strong> <span className="hash-pill">{duplicateInfo.owner || duplicateInfo.creator}</span></div>
+                <div><strong>First Registered On-Chain:</strong> <span style={{ color: '#6ee7b7', fontWeight: 600 }}>{duplicateInfo.timestamp}</span></div>
+                <div><strong>Version Number:</strong> v{duplicateInfo.version}.0</div>
+                {duplicateInfo.licenseTerms && (
+                  <div><strong>Protected Under License:</strong> <span style={{ color: '#93c5fd' }}>{duplicateInfo.licenseTerms.substring(0, 60)}...</span></div>
+                )}
               </div>
-              <div style={{ marginTop: '0.75rem' }}>
-                <Link href={`/verify?hash=${fileHash}`} className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>
-                  Inspect Existing Registry Record →
+              <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <Link href={`/verify?hash=${fileHash}`} className="btn btn-secondary" style={{ padding: '0.45rem 0.9rem', fontSize: '0.82rem' }}>
+                  🔍 Inspect Original Provenance on Public Verify Page →
                 </Link>
               </div>
             </div>
@@ -341,14 +351,25 @@ function RegisterIPContent() {
           {/* Action Buttons */}
           <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
             {account ? (
-              <button 
-                type="submit" 
-                className="btn btn-primary" 
-                style={{ flex: 1, padding: '1rem' }}
-                disabled={isProcessing || isDuplicate || !file || isCheckingDuplicate}
-              >
-                {isProcessing ? 'Processing Registration...' : 'Register on Blockchain (EVM)'}
-              </button>
+              isDuplicate ? (
+                <button 
+                  type="button" 
+                  className="btn btn-primary" 
+                  style={{ flex: 1, padding: '1rem', opacity: 0.85, cursor: 'not-allowed', background: 'rgba(239, 68, 68, 0.2)', color: '#fca5a5', border: '1px solid #ef4444', fontWeight: 700 }}
+                  disabled
+                >
+                  🛡️ Registration Blocked: Content Already Protected on Blockchain
+                </button>
+              ) : (
+                <button 
+                  type="submit" 
+                  className="btn btn-primary" 
+                  style={{ flex: 1, padding: '1rem' }}
+                  disabled={isProcessing || !file || isCheckingDuplicate}
+                >
+                  {isProcessing ? 'Processing Registration...' : 'Register on Blockchain (EVM)'}
+                </button>
+              )
             ) : (
               <button 
                 type="button" 
