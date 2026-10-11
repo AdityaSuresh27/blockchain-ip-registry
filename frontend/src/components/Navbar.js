@@ -10,11 +10,11 @@ export default function Navbar() {
   const { 
     account, 
     balance, 
-    isConnecting, 
-    isLocalNetwork, 
-    connectWallet, 
-    disconnectWallet,
-    switchToLocalNetwork 
+    activeDemoIndex,
+    demoAccounts,
+    connectDemoAccount,
+    connectMetaMask,
+    walletMode
   } = useWallet();
 
   const navItems = [
@@ -62,20 +62,33 @@ export default function Navbar() {
           <span>Localhost:8545</span>
         </div>
 
-        {/* Network warning if not on local node */}
-        {account && !isLocalNetwork && (
-          <button 
-            className="btn btn-danger" 
-            style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
-            onClick={switchToLocalNetwork}
+        {/* 1-Click Identity Selector (No extension required!) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <select
+            className="form-select"
+            value={activeDemoIndex}
+            onChange={(e) => connectDemoAccount(Number(e.target.value))}
+            style={{
+              padding: '0.4rem 0.75rem',
+              fontSize: '0.825rem',
+              background: 'rgba(19, 28, 43, 0.9)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-md)',
+              color: 'var(--text-primary)',
+              cursor: 'pointer',
+              marginBottom: 0
+            }}
+            title="Switch Simulated Test Account"
           >
-            Switch to Hardhat (31337)
-          </button>
-        )}
+            {demoAccounts.map((acc, idx) => (
+              <option key={idx} value={idx} style={{ background: '#0d131d', color: '#fff' }}>
+                👤 {acc.name}
+              </option>
+            ))}
+          </select>
 
-        {/* Wallet action */}
-        {account ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {/* Account Balance & Address Pill */}
+          {account && (
             <div 
               style={{
                 background: 'rgba(19, 28, 43, 0.9)',
@@ -89,31 +102,15 @@ export default function Navbar() {
               }}
             >
               <span style={{ color: 'var(--primary-emerald)', fontWeight: 600 }}>
-                {parseFloat(balance).toFixed(2)} ETH
+                {parseFloat(balance).toFixed(1)} ETH
               </span>
               <span style={{ color: 'var(--text-muted)' }}>|</span>
               <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
                 {formatAddress(account)}
               </span>
             </div>
-            <button 
-              className="btn btn-secondary" 
-              style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}
-              onClick={disconnectWallet}
-              title="Disconnect Wallet"
-            >
-              ✕
-            </button>
-          </div>
-        ) : (
-          <button 
-            className="btn btn-primary" 
-            onClick={connectWallet}
-            disabled={isConnecting}
-          >
-            {isConnecting ? 'Connecting...' : 'Connect Wallet'}
-          </button>
-        )}
+          )}
+        </div>
       </div>
     </nav>
   );
