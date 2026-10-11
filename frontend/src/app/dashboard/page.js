@@ -8,7 +8,7 @@ import contractAddress from '../../contracts/contract-address.json';
 import IPRegistryArtifact from '../../contracts/IPRegistry.json';
 
 export default function DashboardPage() {
-  const { account, signer, provider, connectWallet } = useWallet();
+  const { account, signer, provider, connectWallet, currentAccount, connectAccountByIndex } = useWallet();
 
   const [records, setRecords] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -103,11 +103,11 @@ export default function DashboardPage() {
     <div className="container">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '2.5rem' }}>
         <div>
-          <h1 style={{ fontSize: '2.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>
+          <h1 style={{ fontSize: '2.4rem', fontWeight: 800, marginBottom: '0.4rem' }}>
             My Intellectual Property Portfolio
           </h1>
           <p style={{ color: 'var(--text-secondary)' }}>
-            Manage registered assets, lineage versions, license agreements, and legal ownership.
+            Manage registered digital works, licensing terms, version chains, and legal title transfers for {currentAccount?.name || 'your account'}.
           </p>
         </div>
 
@@ -147,13 +147,15 @@ export default function DashboardPage() {
           <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.75rem' }}>
             No Registered Assets Found
           </h2>
-          <p style={{ color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto 1.5rem auto' }}>
-            You have not registered any intellectual property records with wallet address{' '}
-            <span className="hash-pill">{account.substring(0, 10)}...</span> yet.
+          <p style={{ color: 'var(--text-secondary)', maxWidth: '520px', margin: '0 auto 1.5rem auto', fontSize: '0.9rem' }}>
+            No intellectual property records are registered or owned by wallet address{' '}
+            <span className="hash-pill">{account.substring(0, 10)}...</span> yet. Upload a work to secure your copyright on-chain!
           </p>
-          <Link href="/register" className="btn btn-primary">
-            Register Your First Work
-          </Link>
+          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+            <Link href="/register" className="btn btn-primary">
+              Register Your First Work
+            </Link>
+          </div>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>

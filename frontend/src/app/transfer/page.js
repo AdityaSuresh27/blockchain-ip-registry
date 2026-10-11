@@ -12,7 +12,7 @@ function TransferOwnershipContent() {
   const searchParams = useSearchParams();
   const initialHash = searchParams.get('hash') || '';
 
-  const { account, signer, provider, connectWallet } = useWallet();
+  const { account, signer, provider, connectWallet, accounts, currentAccount, connectAccountByIndex } = useWallet();
 
   const [fileHash, setFileHash] = useState(initialHash);
   const [newOwner, setNewOwner] = useState('');
@@ -154,10 +154,10 @@ function TransferOwnershipContent() {
         {!account ? (
           <div style={{ textAlign: 'center', padding: '2rem 0' }}>
             <p style={{ marginBottom: '1.5rem', color: 'var(--text-secondary)' }}>
-              Connect your MetaMask wallet to view and manage intellectual property records you own.
+              Select an account from the navbar or connect a wallet to view and manage intellectual property records you own.
             </p>
-            <button className="btn btn-primary" onClick={connectWallet}>
-              Connect Wallet
+            <button className="btn-primary" onClick={connectWallet}>
+              Connect Default Account
             </button>
           </div>
         ) : (
@@ -227,9 +227,27 @@ function TransferOwnershipContent() {
                 disabled={isTransferring}
                 required
               />
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.4rem', marginBottom: 0 }}>
-                Tip: For demo purposes, you can use any other address from Hardhat's test accounts (e.g. 0x70997970C51812dc3A010C7d01b50e0d17dc79C8).
-              </p>
+              <div style={{ marginTop: '0.65rem' }}>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.35rem' }}>
+                  Quick fill recipient from simulated identities:
+                </span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                  {(accounts || [])
+                    .filter(a => a.address.toLowerCase() !== account?.toLowerCase())
+                    .map((a, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => setNewOwner(a.address)}
+                        className="btn-secondary"
+                        style={{ padding: '0.22rem 0.6rem', fontSize: '0.72rem', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
+                        title={a.address}
+                      >
+                        {a.name}
+                      </button>
+                    ))}
+                </div>
+              </div>
             </div>
 
             {statusMessage && (
@@ -242,7 +260,7 @@ function TransferOwnershipContent() {
               type="submit"
               className="btn btn-primary"
               style={{ width: '100%', padding: '0.9rem', marginTop: '1rem' }}
-              disabled={isTransferring || (selectedRecordDetails && !selectedRecordDetails.isOwner)}
+              disabled={isTransferring || (selectedRecordDetails && !selectedRecordDetails.isOwner) || (myRecords.length === 0 && !fileHash)}
             >
               {isTransferring ? 'Transferring Ownership...' : 'Execute Ownership Transfer on Blockchain'}
             </button>
