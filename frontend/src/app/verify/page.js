@@ -12,7 +12,7 @@ function VerifyIPContent() {
   const searchParams = useSearchParams();
   const initialHash = searchParams.get('hash') || '';
 
-  const { provider, readOnlyProvider } = useWallet();
+  const { provider, readOnlyProvider, currentAccount } = useWallet();
 
   const [activeTab, setActiveTab] = useState(initialHash ? 'hash' : 'file');
   const [file, setFile] = useState(null);
@@ -77,18 +77,100 @@ function VerifyIPContent() {
           console.warn('Could not fetch child versions:', e);
         }
 
+        // Query full on-chain transaction history & event logs
+        let timelineEvents = [];
+        try {
+          const regFilter = contract.filters.IPRegistered(targetHash);
+          const transferFilter = contract.filters.OwnershipTransferred(targetHash);
+          const licenseFilter = contract.filters.LicenseUpdated(targetHash);
+
+          const [regLogs, transferLogs, licenseLogs] = await Promise.all([
+            contract.queryFilter(regFilter, 0),
+            contract.queryFilter(transferFilter, 0),
+            contract.queryFilter(licenseFilter, 0)
+          ]);
+
+          for (const log of regLogs) {
+            let blkTimestamp = Number(record.timestamp);
+            try {
+              const blk = await activeProvider.getBlock(log.blockNumber);
+              if (blk) blkTimestamp = Number(blk.timestamp);
+            } catch (e) {}
+
+            timelineEvents.push({
+              type: 'REGISTERED',
+              label: 'Original IP Registration',
+              txHash: log.transactionHash,
+              blockNumber: log.blockNumber,
+              timestamp: new Date(blkTimestamp * 1000).toLocaleString('en-US', {
+                dateStyle: 'full',
+                timeStyle: 'medium'
+              }),
+              details: `Initial cryptographic fingerprint anchored on-chain by author ${log.args ? (log.args[1] || log.args.creator) : record.creator}`
+            });
+          }
+
+          for (const log of transferLogs) {
+            let blkTimestamp = Number(record.timestamp);
+            try {
+              const blk = await activeProvider.getBlock(log.blockNumber);
+              if (blk) blkTimestamp = Number(blk.timestamp);
+            } catch (e) {}
+
+            timelineEvents.push({
+              type: 'TRANSFERRED',
+              label: 'Ownership Rights Transferred',
+              txHash: log.transactionHash,
+              blockNumber: log.blockNumber,
+              timestamp: new Date(blkTimestamp * 1000).toLocaleString('en-US', {
+                dateStyle: 'full',
+                timeStyle: 'medium'
+              }),
+              details: `Legal title transferred from ${log.args ? (log.args[1] || log.args.oldOwner) : 'previous owner'} ➔ ${log.args ? (log.args[2] || log.args.newOwner) : 'new owner'}`
+            });
+          }
+
+          for (const log of licenseLogs) {
+            let blkTimestamp = Number(record.timestamp);
+            try {
+              const blk = await activeProvider.getBlock(log.blockNumber);
+              if (blk) blkTimestamp = Number(blk.timestamp);
+            } catch (e) {}
+
+            timelineEvents.push({
+              type: 'LICENSED',
+              label: 'Licensing Terms Updated',
+              txHash: log.transactionHash,
+              blockNumber: log.blockNumber,
+              timestamp: new Date(blkTimestamp * 1000).toLocaleString('en-US', {
+                dateStyle: 'full',
+                timeStyle: 'medium'
+              }),
+              details: `Updated license terms: ${log.args ? (log.args[1] || log.args.newLicenseTerms) : 'terms updated'}`
+            });
+          }
+
+          timelineEvents.sort((a, b) => a.blockNumber - b.blockNumber);
+        } catch (e) {
+          console.warn('Could not query on-chain timeline events:', e);
+        }
+
         setResult({
           exists: true,
           hash: targetHash,
           creator: record.creator,
           owner: record.owner,
-          timestamp: new Date(Number(record.timestamp) * 1000).toLocaleString(),
+          timestamp: new Date(Number(record.timestamp) * 1000).toLocaleString('en-US', {
+            dateStyle: 'full',
+            timeStyle: 'medium'
+          }),
           rawTimestamp: Number(record.timestamp),
           version: Number(record.version),
           licenseTerms: record.licenseTerms,
           ipfsURI: record.ipfsURI,
           previousVersionHash: record.previousVersionHash !== ethers.ZeroHash ? record.previousVersionHash : null,
-          gatewayURL: record.ipfsURI.replace('ipfs://', '/ipfs/')
+          gatewayURL: record.ipfsURI.replace('ipfs://', '/ipfs/'),
+          timeline: timelineEvents
         });
         setSubsequentVersions(childVersions);
       } else {
@@ -303,6 +385,68 @@ function VerifyIPContent() {
                     </div>
                   </div>
                 )}
+                <div style={{ marginTop: '2.5rem', paddingTop: '1.75rem', borderTop: '1px solid var(--border-subtle)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                    <div>
+                      <h3 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span>📜</span> Complete On-Chain Transaction Audit Trail
+                      </h3>
+                      <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', margin: '0.2rem 0 0 0' }}>
+                        Full chronological provenance and ownership history mined into the blockchain ledger
+                      </p>
+                    </div>
+                    <span className="badge badge-info" style={{ fontSize: '0.75rem' }}>
+                      {result.timeline?.length || 1} Confirmed Lifecycle Event{result.timeline?.length === 1 ? '' : 's'}
+                    </span>
+                  </div>
+
+                  {result.timeline && result.timeline.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {result.timeline.map((item, idx) => (
+                        <div
+                          key={idx}
+                          style={{
+                            background: 'rgba(255, 255, 255, 0.02)',
+                            border: '1px solid var(--border-subtle)',
+                            borderRadius: 'var(--radius-sm)',
+                            padding: '1rem 1.25rem'
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.4rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <span style={{
+                                width: '8px',
+                                height: '8px',
+                                borderRadius: '50%',
+                                background: item.type === 'REGISTERED' ? '#10b981' : item.type === 'TRANSFERRED' ? '#3b82f6' : '#a855f7'
+                              }} />
+                              <strong style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>{item.label}</strong>
+                              <span className="badge" style={{ fontSize: '0.68rem', background: 'rgba(255,255,255,0.06)' }}>
+                                Block #{item.blockNumber}
+                              </span>
+                            </div>
+                            <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                              {item.timestamp}
+                            </span>
+                          </div>
+
+                          <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: '0.35rem 0' }}>
+                            {item.details}
+                          </div>
+
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <span>Tx Hash:</span>
+                            <span className="hash-pill font-mono">{item.txHash}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', padding: '1rem' }}>
+                      First registration mined and sealed on-chain.
+                    </div>
+                  )}
+                </div>
               </div>
             ) : (
               <div style={{ background: 'rgba(244, 63, 94, 0.08)', border: '1px solid var(--danger)', borderRadius: 'var(--radius-md)', padding: '2rem', textAlign: 'center' }}>
