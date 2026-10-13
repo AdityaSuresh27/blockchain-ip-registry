@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { ethers } from 'ethers';
 import { useWallet } from '../../context/WalletContext';
+import { downloadIPFSFile } from '../../utils/downloadHelper';
 import FileDropZone from '../../components/FileDropZone';
 import TransactionStepper from '../../components/TransactionStepper';
 import contractAddress from '../../contracts/contract-address.json';
@@ -522,15 +523,15 @@ function RegisterIPContent() {
                 <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{registeredRecord.fileName}</span>
               </div>
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                <a 
-                  href={`${registeredRecord.gatewayURL}?download=1`} 
-                  download 
+                <button 
+                  type="button"
+                  onClick={() => downloadIPFSFile(registeredRecord.gatewayURL, registeredRecord.fileName || `${registeredRecord.fileHash.substring(0, 10)}.bin`)}
                   className="btn btn-primary btn-sm"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', textDecoration: 'none' }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer' }}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                   Download Original File
-                </a>
+                </button>
                 <Link href={`/verify?hash=${registeredRecord.fileHash}`} className="btn btn-secondary btn-sm" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>
                   Verify On-Chain →
                 </Link>
@@ -551,9 +552,13 @@ function RegisterIPContent() {
                         View in Gateway ↗
                       </a>
                       <span style={{ color: 'var(--border-strong)' }}>|</span>
-                      <a href={`${registeredRecord.gatewayURL}?download=1`} download style={{ color: 'var(--accent-teal)', textDecoration: 'none', fontWeight: 600 }}>
+                      <button 
+                        type="button"
+                        onClick={() => downloadIPFSFile(registeredRecord.gatewayURL, registeredRecord.fileName || `${registeredRecord.fileHash.substring(0, 10)}.bin`)}
+                        style={{ background: 'none', border: 'none', padding: 0, color: 'var(--accent-teal)', textDecoration: 'none', fontWeight: 600, cursor: 'pointer', fontSize: 'inherit' }}
+                      >
                         Download Original File ↓
-                      </a>
+                      </button>
                       <span className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>({registeredRecord.ipfsURI})</span>
                     </div>
                   </td>

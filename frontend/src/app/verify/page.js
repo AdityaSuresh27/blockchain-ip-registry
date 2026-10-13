@@ -4,6 +4,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ethers } from 'ethers';
 import { useWallet } from '../../context/WalletContext';
+import { downloadIPFSFile } from '../../utils/downloadHelper';
 import FileDropZone from '../../components/FileDropZone';
 import contractAddress from '../../contracts/contract-address.json';
 import IPRegistryArtifact from '../../contracts/IPRegistry.json';
@@ -366,15 +367,15 @@ function VerifyIPContent() {
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                             View in Gateway
                           </a>
-                          <a 
-                            href={`${result.gatewayURL}?download=1`} 
-                            download 
+                          <button 
+                            type="button"
+                            onClick={() => downloadIPFSFile(result.gatewayURL, `${result.hash.substring(0, 10)}.bin`)}
                             className="btn btn-primary btn-sm"
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', textDecoration: 'none' }}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer' }}
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                             Download Original File
-                          </a>
+                          </button>
                           <span className="mono" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                             {result.ipfsURI}
                           </span>

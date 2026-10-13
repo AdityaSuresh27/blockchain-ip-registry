@@ -4,11 +4,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { ethers } from 'ethers';
 import { useWallet } from '../../context/WalletContext';
+import { downloadIPFSFile } from '../../utils/downloadHelper';
 import contractAddress from '../../contracts/contract-address.json';
 import IPRegistryArtifact from '../../contracts/IPRegistry.json';
 
 export default function DashboardPage() {
-  const { account, signer, provider, connectWallet, currentAccount, connectAccountByIndex } = useWallet();
+  const { account, signer, provider, readOnlyProvider, connectWallet, currentAccount, connectAccountByIndex } = useWallet();
 
   const [records, setRecords] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -20,50 +21,68 @@ export default function DashboardPage() {
   const [activeFilter, setActiveFilter] = useState('all'); // 'all', 'owned', 'created'
 
   const loadPortfolio = useCallback(async () => {
-    if (!account || !provider) return;
+    if (!account) return;
 
     try {
       setIsLoading(true);
+      const activeProvider = provider || readOnlyProvider || new ethers.JsonRpcProvider('http://127.0.0.1:8545');
       const contract = new ethers.Contract(
         contractAddress.IPRegistry,
         IPRegistryArtifact.abi,
-        provider
+        activeProvider
       );
 
       // Fetch all hashes to include both created assets and assets acquired via transfer
-      const allHashes = await contract.getAllHashes();
+      const hashSet = new Set();
+      try {
+        const allHashes = await contract.getAllHashes();
+        allHashes.forEach(h => hashSet.add(h));
+      } catch (e) {
+        console.warn('getAllHashes failed, falling back:', e);
+      }
+      try {
+        const creatorHashes = await contract.getCreatorRecords(account);
+        creatorHashes.forEach(h => hashSet.add(h));
+      } catch (e) {
+        console.warn('getCreatorRecords failed:', e);
+      }
+
       const loaded = [];
 
-      for (const h of allHashes) {
-        const rec = await contract.verifyIP(h);
-        if (rec.exists) {
-          const isOwner = rec.owner.toLowerCase() === account.toLowerCase();
-          const isCreator = rec.creator.toLowerCase() === account.toLowerCase();
+      for (const h of hashSet) {
+        try {
+          const rec = await contract.verifyIP(h);
+          if (rec.exists) {
+            const isOwner = rec.owner && rec.owner.toLowerCase() === account.toLowerCase();
+            const isCreator = rec.creator && rec.creator.toLowerCase() === account.toLowerCase();
 
-          if (isOwner || isCreator) {
-            // Check subsequent revisions
-            let children = [];
-            try {
-              children = await contract.getSubsequentVersions(h);
-            } catch (e) {
-              console.warn(e);
+            if (isOwner || isCreator) {
+              // Check subsequent revisions
+              let children = [];
+              try {
+                children = await contract.getSubsequentVersions(h);
+              } catch (e) {
+                console.warn(e);
+              }
+
+              loaded.push({
+                hash: h,
+                creator: rec.creator,
+                owner: rec.owner,
+                timestamp: new Date(Number(rec.timestamp) * 1000).toLocaleString(),
+                version: Number(rec.version),
+                license: rec.licenseTerms,
+                ipfsURI: rec.ipfsURI,
+                gatewayURL: rec.ipfsURI.replace('ipfs://', '/ipfs/'),
+                previousVersionHash: rec.previousVersionHash !== ethers.ZeroHash ? rec.previousVersionHash : null,
+                subsequentVersions: children,
+                isOwner,
+                isCreator
+              });
             }
-
-            loaded.push({
-              hash: h,
-              creator: rec.creator,
-              owner: rec.owner,
-              timestamp: new Date(Number(rec.timestamp) * 1000).toLocaleString(),
-              version: Number(rec.version),
-              license: rec.licenseTerms,
-              ipfsURI: rec.ipfsURI,
-              gatewayURL: rec.ipfsURI.replace('ipfs://', '/ipfs/'),
-              previousVersionHash: rec.previousVersionHash !== ethers.ZeroHash ? rec.previousVersionHash : null,
-              subsequentVersions: children,
-              isOwner,
-              isCreator
-            });
           }
+        } catch (recErr) {
+          console.warn('Error reading record for hash', h, recErr);
         }
       }
       setRecords(loaded.reverse());
@@ -72,7 +91,7 @@ export default function DashboardPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [account, provider]);
+  }, [account, provider, readOnlyProvider]);
 
   useEffect(() => {
     loadPortfolio();
@@ -280,9 +299,13 @@ export default function DashboardPage() {
                   View in Gateway ↗
                 </a>
                 <span style={{ color: 'var(--border-strong)' }}>|</span>
-                <a href={`${item.gatewayURL}?download=1`} download style={{ color: 'var(--accent-teal)', textDecoration: 'none', fontWeight: 600 }}>
+                <button 
+                  type="button"
+                  onClick={() => downloadIPFSFile(item.gatewayURL, `${item.hash.substring(0, 10)}.bin`)}
+                  style={{ background: 'none', border: 'none', padding: 0, color: 'var(--accent-teal)', textDecoration: 'none', fontWeight: 600, cursor: 'pointer', fontSize: 'inherit' }}
+                >
                   Download Original File ↓
-                </a>
+                </button>
                 <span className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>({item.ipfsURI})</span>
               </div>
 
@@ -344,15 +367,15 @@ export default function DashboardPage() {
 
               {/* Action Buttons */}
               <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', paddingTop: '1.25rem', borderTop: '1px solid var(--border-subtle)', alignItems: 'center' }}>
-                <a 
-                  href={`${item.gatewayURL}?download=1`} 
-                  download 
+                <button 
+                  type="button"
+                  onClick={() => downloadIPFSFile(item.gatewayURL, `${item.hash.substring(0, 10)}.bin`)}
                   className="btn btn-primary" 
-                  style={{ fontSize: '0.825rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                  style={{ fontSize: '0.825rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer' }}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                   Download Original File
-                </a>
+                </button>
 
                 <a 
                   href={item.gatewayURL} 

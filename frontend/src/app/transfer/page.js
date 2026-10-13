@@ -12,7 +12,7 @@ function TransferOwnershipContent() {
   const searchParams = useSearchParams();
   const initialHash = searchParams.get('hash') || '';
 
-  const { account, signer, provider, connectWallet, accounts, currentAccount, connectAccountByIndex } = useWallet();
+  const { account, signer, provider, readOnlyProvider, connectWallet, accounts, currentAccount, connectAccountByIndex } = useWallet();
 
   const [fileHash, setFileHash] = useState(initialHash);
   const [newOwner, setNewOwner] = useState('');
@@ -26,13 +26,14 @@ function TransferOwnershipContent() {
   // Fetch registered records for current account
   useEffect(() => {
     async function loadMyRecords() {
-      if (!account || !provider) return;
+      if (!account) return;
       try {
         setIsLoadingRecords(true);
+        const activeRpc = provider || readOnlyProvider || new ethers.JsonRpcProvider('http://127.0.0.1:8545');
         const contract = new ethers.Contract(
           contractAddress.IPRegistry,
           IPRegistryArtifact.abi,
-          provider
+          activeRpc
         );
 
         // Fetch all hashes to find any IPs currently owned by this account
@@ -67,12 +68,13 @@ function TransferOwnershipContent() {
     setSelectedRecordDetails(null);
     setTransferSuccess(null);
 
-    if (val && val.startsWith('0x') && val.length === 66 && provider) {
+    if (val && val.startsWith('0x') && val.length === 66) {
       try {
+        const activeRpc = provider || readOnlyProvider || new ethers.JsonRpcProvider('http://127.0.0.1:8545');
         const contract = new ethers.Contract(
           contractAddress.IPRegistry,
           IPRegistryArtifact.abi,
-          provider
+          activeRpc
         );
         const rec = await contract.verifyIP(val);
         if (rec.exists) {
