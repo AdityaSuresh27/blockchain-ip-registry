@@ -35,10 +35,11 @@ function TransferOwnershipContent() {
           provider
         );
 
-        const hashes = await contract.getCreatorRecords(account);
+        // Fetch all hashes to find any IPs currently owned by this account
+        const allHashes = await contract.getAllHashes();
         const records = [];
 
-        for (const h of hashes) {
+        for (const h of allHashes) {
           const rec = await contract.verifyIP(h);
           if (rec.exists && rec.owner.toLowerCase() === account.toLowerCase()) {
             records.push({

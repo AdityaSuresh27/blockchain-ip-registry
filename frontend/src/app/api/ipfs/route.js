@@ -50,8 +50,8 @@ export async function POST(request) {
     const multihash = Buffer.concat([Buffer.from([0x12, 0x20]), sha256Digest]);
     const cid = toBase58(multihash);
 
-    // Save to public/ipfs directory for local gateway serving
-    const ipfsDir = path.join(process.cwd(), 'public', 'ipfs');
+    // Save to storage/ipfs directory for gateway serving
+    const ipfsDir = path.join(process.cwd(), 'storage', 'ipfs');
     if (!fs.existsSync(ipfsDir)) {
       fs.mkdirSync(ipfsDir, { recursive: true });
     }
@@ -94,11 +94,18 @@ export async function GET(request) {
     return NextResponse.json({ error: 'CID parameter is required' }, { status: 400 });
   }
 
-  const metaPath = path.join(process.cwd(), 'public', 'ipfs', `${cid}.meta.json`);
-  if (!fs.existsSync(metaPath)) {
-    return NextResponse.json({ error: 'CID not found on local IPFS storage' }, { status: 404 });
+  const searchDirs = [
+    path.join(process.cwd(), 'storage', 'ipfs'),
+    path.join(process.cwd(), 'public', 'ipfs')
+  ];
+
+  for (const dir of searchDirs) {
+    const candidateMeta = path.join(dir, `${cid}.meta.json`);
+    if (fs.existsSync(candidateMeta)) {
+      const metadata = JSON.parse(fs.readFileSync(candidateMeta, 'utf8'));
+      return NextResponse.json({ success: true, metadata });
+    }
   }
 
-  const metadata = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
-  return NextResponse.json({ success: true, metadata });
+  return NextResponse.json({ error: 'CID not found on local IPFS storage' }, { status: 404 });
 }

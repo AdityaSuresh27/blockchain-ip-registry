@@ -39,6 +39,8 @@ frontend/build/
 # Preserve the folder structure with .gitkeep, but ignore uploaded user payload files
 frontend/public/ipfs/*
 !frontend/public/ipfs/.gitkeep
+frontend/storage/ipfs/*
+!frontend/storage/ipfs/.gitkeep
 
 # --- Debug & Process Logs ---
 *.log

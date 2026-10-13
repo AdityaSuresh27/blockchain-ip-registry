@@ -290,9 +290,20 @@ function VerifyIPContent() {
                     </h2>
                   </div>
 
-                  <button className="btn btn-secondary" onClick={copyShareLink} style={{ fontSize: '0.8rem', padding: '0.45rem 0.85rem' }}>
-                    {copiedLink ? '✓ Copied Link' : '🔗 Copy Shareable Audit Link'}
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+                    <a 
+                      href={`${result.gatewayURL}?download=1`} 
+                      download 
+                      className="btn btn-primary"
+                      style={{ fontSize: '0.825rem', padding: '0.45rem 0.95rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', textDecoration: 'none' }}
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                      Download Original File
+                    </a>
+                    <button className="btn btn-secondary" onClick={copyShareLink} style={{ fontSize: '0.8rem', padding: '0.45rem 0.85rem' }}>
+                      {copiedLink ? '✓ Copied Link' : '🔗 Copy Shareable Audit Link'}
+                    </button>
+                  </div>
                 </div>
 
                 <table className="data-table">
@@ -344,14 +355,30 @@ function VerifyIPContent() {
                     <tr>
                       <td><strong>Off-Chain IPFS Storage:</strong></td>
                       <td>
-                        <a 
-                          href={result.gatewayURL} 
-                          target="_blank" 
-                          rel="noreferrer" 
-                          style={{ color: 'var(--accent-cyan)', textDecoration: 'none', fontWeight: 600 }}
-                        >
-                          {result.ipfsURI} ↗ (View / Download from Local IPFS Gateway)
-                        </a>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem', alignItems: 'center' }}>
+                          <a 
+                            href={result.gatewayURL} 
+                            target="_blank" 
+                            rel="noreferrer" 
+                            className="btn btn-secondary btn-sm"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', textDecoration: 'none' }}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                            View in Gateway
+                          </a>
+                          <a 
+                            href={`${result.gatewayURL}?download=1`} 
+                            download 
+                            className="btn btn-primary btn-sm"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', textDecoration: 'none' }}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            Download Original File
+                          </a>
+                          <span className="mono" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                            {result.ipfsURI}
+                          </span>
+                        </div>
                       </td>
                     </tr>
                     <tr>

@@ -21,7 +21,7 @@ const LICENSE_PRESETS = [
 
 function RegisterIPContent() {
   const searchParams = useSearchParams();
-  const initialParent = searchParams.get('parent') || '';
+  const initialParent = searchParams.get('parent') || searchParams.get('revisionOf') || '';
 
   const { account, signer, provider, readOnlyProvider, connectWallet, currentAccount, connectAccountByIndex } = useWallet();
 
@@ -32,12 +32,78 @@ function RegisterIPContent() {
   const [isRevision, setIsRevision] = useState(Boolean(initialParent));
   const [parentHash, setParentHash] = useState(initialParent);
 
+  // Predecessor verification state
+  const [parentRecord, setParentRecord] = useState(null);
+  const [isCheckingParent, setIsCheckingParent] = useState(false);
+  const [parentError, setParentError] = useState('');
+
+  const checkPredecessor = React.useCallback(async (hash) => {
+    if (!hash || !hash.startsWith('0x') || hash.length !== 66) {
+      setParentRecord(null);
+      if (hash && hash.length > 2) {
+        setParentError('Predecessor hash must be a valid 66-character hex string (0x...)');
+      } else {
+        setParentError('');
+      }
+      return;
+    }
+
+    const activeProvider = provider || readOnlyProvider;
+    if (!activeProvider) return;
+
+    try {
+      setIsCheckingParent(true);
+      setParentError('');
+      const contract = new ethers.Contract(
+        contractAddress.IPRegistry,
+        IPRegistryArtifact.abi,
+        activeProvider
+      );
+
+      const rec = await contract.verifyIP(hash);
+      if (!rec.exists) {
+        setParentRecord(null);
+        setParentError('Predecessor IP not found in blockchain registry.');
+      } else {
+        const isOwner = (account || '').toLowerCase() === rec.owner.toLowerCase();
+        setParentRecord({
+          exists: true,
+          creator: rec.creator,
+          owner: rec.owner,
+          version: Number(rec.version),
+          timestamp: new Date(Number(rec.timestamp) * 1000).toLocaleString(),
+          licenseTerms: rec.licenseTerms,
+          ipfsURI: rec.ipfsURI,
+          isOwner
+        });
+
+        if (!isOwner) {
+          setParentError(`Permission Denied: Only current legal titleholder (${rec.owner.slice(0, 8)}...) can publish revisions to this IP.`);
+        }
+      }
+    } catch (e) {
+      console.warn('Error checking predecessor:', e);
+      setParentError('Error verifying predecessor hash on blockchain.');
+    } finally {
+      setIsCheckingParent(false);
+    }
+  }, [account, provider, readOnlyProvider]);
+
   useEffect(() => {
     if (initialParent) {
       setIsRevision(true);
       setParentHash(initialParent);
     }
   }, [initialParent]);
+
+  useEffect(() => {
+    if (isRevision && parentHash) {
+      checkPredecessor(parentHash.trim());
+    } else {
+      setParentRecord(null);
+      setParentError('');
+    }
+  }, [isRevision, parentHash, account, checkPredecessor]);
   
   // Pipeline status
   const [currentStep, setCurrentStep] = useState(1);
@@ -143,7 +209,16 @@ function RegisterIPContent() {
     if (!account || !signer) return alert('Please select an active account identity in the top navbar or connect a wallet.');
     if (isDuplicate) return alert('Cannot register: this file content is already registered and protected on the blockchain.');
     if (!licenseTerms.trim()) return alert('Please specify license terms.');
-    if (isRevision && !parentHash.trim()) return alert('Please provide the parent version hash.');
+
+    if (isRevision) {
+      if (!parentHash.trim()) return alert('Please provide the predecessor version hash.');
+      if (!parentRecord || !parentRecord.exists) {
+        return alert('Cannot publish revision: Predecessor IP was not found on the blockchain.');
+      }
+      if (!parentRecord.isOwner) {
+        return alert(`Cannot publish revision: Only the current verified legal owner (${parentRecord.owner}) can publish revisions to this IP. Your active wallet is ${account}.`);
+      }
+    }
 
     try {
       setIsProcessing(true);
@@ -214,7 +289,7 @@ function RegisterIPContent() {
         blockNumber: receipt.blockNumber,
         timestamp: new Date().toLocaleString(),
         license: licenseTerms,
-        version: isRevision ? 'Revision (v2+)' : 'Version 1.0',
+        version: isRevision ? `Revision (v${(parentRecord?.version || 1) + 1}.0)` : 'Version 1.0',
         creator: account
       });
     } catch (err) {
@@ -293,10 +368,18 @@ function RegisterIPContent() {
             </div>
 
             {isRevision && (
-              <div style={{ background: 'rgba(8, 12, 19, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '1rem', marginBottom: '1rem' }}>
-                <label className="form-label" style={{ fontSize: '0.75rem' }}>
-                  Predecessor Version File Hash (0x...)
-                </label>
+              <div style={{ background: 'rgba(8, 12, 19, 0.6)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '1.25rem', marginBottom: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                  <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: 0 }}>
+                    Predecessor Version File Hash (0x...)
+                  </label>
+                  {isCheckingParent && (
+                    <span style={{ fontSize: '0.75rem', color: 'var(--accent-cyan)' }}>
+                      Verifying title on smart contract...
+                    </span>
+                  )}
+                </div>
+
                 <input 
                   type="text"
                   className="form-input"
@@ -306,7 +389,45 @@ function RegisterIPContent() {
                   disabled={isProcessing}
                   required={isRevision}
                 />
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.4rem', marginBottom: 0 }}>
+
+                {parentRecord && parentRecord.exists && (
+                  parentRecord.isOwner ? (
+                    <div style={{ marginTop: '0.85rem', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.35)', borderRadius: 'var(--radius-sm)', padding: '0.85rem 1rem' }}>
+                      <div style={{ color: 'var(--primary-emerald)', fontWeight: 700, fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.35rem' }}>
+                        <span>✅</span> Predecessor Ownership Verified: Authorized to Publish Revision
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'grid', gap: '0.25rem' }}>
+                        <div><strong>Active Version:</strong> Version {parentRecord.version}.0 → Next Revision: <span style={{ color: 'var(--accent-teal)', fontWeight: 700 }}>Version {parentRecord.version + 1}.0</span></div>
+                        <div><strong>Verified Titleholder (You):</strong> <span className="mono">{parentRecord.owner}</span></div>
+                        <div><strong>Original Author:</strong> <span className="mono">{parentRecord.creator}</span></div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: '0.85rem', background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.45)', borderRadius: 'var(--radius-sm)', padding: '0.85rem 1rem' }}>
+                      <div style={{ color: '#f87171', fontWeight: 700, fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.35rem' }}>
+                        <span>⛔</span> ACCESS DENIED: Only Verified Titleholder Can Revise This IP
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-primary)', display: 'grid', gap: '0.35rem', lineHeight: 1.4 }}>
+                        <div>Under Ethereum smart contract rules, only the account holding legal title can publish new revisions or update content.</div>
+                        <div style={{ background: 'rgba(0,0,0,0.3)', padding: '0.5rem', borderRadius: '4px' }}>
+                          <div><strong>Verified Titleholder:</strong> <span className="mono" style={{ color: '#fbbf24' }}>{parentRecord.owner}</span></div>
+                          <div><strong>Your Active Wallet:</strong> <span className="mono" style={{ color: '#f87171' }}>{account || 'None'}</span></div>
+                        </div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                          Switch to the titleholder account in the top navbar switcher to publish an update to this IP.
+                        </div>
+                      </div>
+                    </div>
+                  )
+                )}
+
+                {parentError && (!parentRecord || !parentRecord.exists) && (
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: '#f87171' }}>
+                    {parentError}
+                  </div>
+                )}
+
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.6rem', marginBottom: 0 }}>
                   The smart contract will link this new revision directly into the immutable parent-child version chain.
                 </p>
               </div>
@@ -360,14 +481,23 @@ function RegisterIPContent() {
                 >
                   🛡️ Registration Blocked: Content Already Protected on Blockchain
                 </button>
+              ) : isRevision && parentRecord && !parentRecord.isOwner ? (
+                <button 
+                  type="button" 
+                  className="btn btn-primary" 
+                  style={{ flex: 1, padding: '1rem', opacity: 0.85, cursor: 'not-allowed', background: 'rgba(239, 68, 68, 0.2)', color: '#fca5a5', border: '1px solid #ef4444', fontWeight: 700 }}
+                  disabled
+                >
+                  ⛔ Revision Blocked: Only Titleholder ({parentRecord.owner.substring(0, 8)}...) Can Publish Updates
+                </button>
               ) : (
                 <button 
                   type="submit" 
                   className="btn btn-primary" 
                   style={{ flex: 1, padding: '1rem' }}
-                  disabled={isProcessing || !file || isCheckingDuplicate}
+                  disabled={isProcessing || !file || isCheckingDuplicate || (isRevision && (!parentRecord || !parentRecord.isOwner))}
                 >
-                  {isProcessing ? 'Processing Registration...' : 'Register on Blockchain (EVM)'}
+                  {isProcessing ? 'Processing Registration...' : isRevision ? `Publish Revision (v${(parentRecord?.version || 1) + 1}.0)` : 'Register on Blockchain (EVM)'}
                 </button>
               )
             ) : (
@@ -391,9 +521,20 @@ function RegisterIPContent() {
                 <span className="badge badge-success">✓ REGISTRATION CONFIRMED</span>
                 <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{registeredRecord.fileName}</span>
               </div>
-              <Link href={`/verify?hash=${registeredRecord.fileHash}`} className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>
-                Verify On-Chain →
-              </Link>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <a 
+                  href={`${registeredRecord.gatewayURL}?download=1`} 
+                  download 
+                  className="btn btn-primary btn-sm"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', textDecoration: 'none' }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Download Original File
+                </a>
+                <Link href={`/verify?hash=${registeredRecord.fileHash}`} className="btn btn-secondary btn-sm" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>
+                  Verify On-Chain →
+                </Link>
+              </div>
             </div>
 
             <table className="data-table">
@@ -405,9 +546,16 @@ function RegisterIPContent() {
                 <tr>
                   <td><strong>IPFS URI (Off-Chain):</strong></td>
                   <td>
-                    <a href={registeredRecord.gatewayURL} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-cyan)', textDecoration: 'none' }}>
-                      {registeredRecord.ipfsURI} ↗ (View payload)
-                    </a>
+                    <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <a href={registeredRecord.gatewayURL} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-cyan)', textDecoration: 'none', fontWeight: 600 }}>
+                        View in Gateway ↗
+                      </a>
+                      <span style={{ color: 'var(--border-strong)' }}>|</span>
+                      <a href={`${registeredRecord.gatewayURL}?download=1`} download style={{ color: 'var(--accent-teal)', textDecoration: 'none', fontWeight: 600 }}>
+                        Download Original File ↓
+                      </a>
+                      <span className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>({registeredRecord.ipfsURI})</span>
+                    </div>
                   </td>
                 </tr>
                 <tr>

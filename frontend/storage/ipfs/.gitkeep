@@ -1,0 +1,2 @@
+# Local IPFS storage simulation directory
+Files pinned through the application are stored here and served through /ipfs/<cid>

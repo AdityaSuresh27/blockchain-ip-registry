@@ -17,6 +17,8 @@ export default function DashboardPage() {
   const [isUpdatingLicense, setIsUpdatingLicense] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
 
+  const [activeFilter, setActiveFilter] = useState('all'); // 'all', 'owned', 'created'
+
   const loadPortfolio = useCallback(async () => {
     if (!account || !provider) return;
 
@@ -28,34 +30,40 @@ export default function DashboardPage() {
         provider
       );
 
-      const hashes = await contract.getCreatorRecords(account);
+      // Fetch all hashes to include both created assets and assets acquired via transfer
+      const allHashes = await contract.getAllHashes();
       const loaded = [];
 
-      for (const h of hashes) {
+      for (const h of allHashes) {
         const rec = await contract.verifyIP(h);
         if (rec.exists) {
-          // Check subsequent revisions
-          let children = [];
-          try {
-            children = await contract.getSubsequentVersions(h);
-          } catch (e) {
-            console.warn(e);
-          }
+          const isOwner = rec.owner.toLowerCase() === account.toLowerCase();
+          const isCreator = rec.creator.toLowerCase() === account.toLowerCase();
 
-          loaded.push({
-            hash: h,
-            creator: rec.creator,
-            owner: rec.owner,
-            timestamp: new Date(Number(rec.timestamp) * 1000).toLocaleString(),
-            version: Number(rec.version),
-            license: rec.licenseTerms,
-            ipfsURI: rec.ipfsURI,
-            gatewayURL: rec.ipfsURI.replace('ipfs://', '/ipfs/'),
-            previousVersionHash: rec.previousVersionHash !== ethers.ZeroHash ? rec.previousVersionHash : null,
-            subsequentVersions: children,
-            isOwner: rec.owner.toLowerCase() === account.toLowerCase(),
-            isCreator: rec.creator.toLowerCase() === account.toLowerCase()
-          });
+          if (isOwner || isCreator) {
+            // Check subsequent revisions
+            let children = [];
+            try {
+              children = await contract.getSubsequentVersions(h);
+            } catch (e) {
+              console.warn(e);
+            }
+
+            loaded.push({
+              hash: h,
+              creator: rec.creator,
+              owner: rec.owner,
+              timestamp: new Date(Number(rec.timestamp) * 1000).toLocaleString(),
+              version: Number(rec.version),
+              license: rec.licenseTerms,
+              ipfsURI: rec.ipfsURI,
+              gatewayURL: rec.ipfsURI.replace('ipfs://', '/ipfs/'),
+              previousVersionHash: rec.previousVersionHash !== ethers.ZeroHash ? rec.previousVersionHash : null,
+              subsequentVersions: children,
+              isOwner,
+              isCreator
+            });
+          }
         }
       }
       setRecords(loaded.reverse());
@@ -165,16 +173,52 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {records.map((item, idx) => (
+          {/* Filter Tabs */}
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.75rem' }}>
+            <button
+              className={`btn btn-sm ${activeFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setActiveFilter('all')}
+            >
+              All Portfolio Assets ({records.length})
+            </button>
+            <button
+              className={`btn btn-sm ${activeFilter === 'owned' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setActiveFilter('owned')}
+            >
+              Active Legal Title ({records.filter(r => r.isOwner).length})
+            </button>
+            <button
+              className={`btn btn-sm ${activeFilter === 'created' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setActiveFilter('created')}
+            >
+              Original Creations ({records.filter(r => r.isCreator).length})
+            </button>
+          </div>
+
+          {records
+            .filter(item => {
+              if (activeFilter === 'owned') return item.isOwner;
+              if (activeFilter === 'created') return item.isCreator;
+              return true;
+            })
+            .map((item, idx) => (
             <div key={idx} className="glass-panel" style={{ padding: '2rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
                   <span className="badge badge-success">Version {item.version}.0</span>
-                  {item.isCreator && <span className="badge badge-info">Author / Creator</span>}
+                  
                   {item.isOwner ? (
-                    <span className="badge badge-success">Current Titleholder</span>
+                    item.isCreator ? (
+                      <span className="badge badge-success">🏆 Original Author & Legal Owner</span>
+                    ) : (
+                      <span className="badge badge-success" style={{ background: 'rgba(16, 185, 129, 0.18)', border: '1px solid var(--primary-emerald)' }}>
+                        🏆 Legal Owner (Acquired via Transfer)
+                      </span>
+                    )
                   ) : (
-                    <span className="badge badge-warning">Transferred to {item.owner.substring(0, 8)}...</span>
+                    <span className="badge badge-warning" style={{ background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.4)' }}>
+                      📜 Original Author (Title Transferred)
+                    </span>
                   )}
                 </div>
 
@@ -183,6 +227,16 @@ export default function DashboardPage() {
                 </div>
               </div>
 
+              {/* Ownership Transferred Warning for Non-Owners */}
+              {!item.isOwner && (
+                <div style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 'var(--radius-sm)', padding: '0.75rem 1rem', fontSize: '0.8rem', color: '#fcd34d', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span>ℹ️</span>
+                  <div>
+                    <strong>Ownership Transferred:</strong> You are permanently recorded as the original creator. However, legal ownership was transferred to <span className="mono">{item.owner}</span>. Only the current owner has the cryptographic authority to transfer ownership, update licenses, or publish revisions.
+                  </div>
+                </div>
+              )}
+
               {/* SHA-256 Hash */}
               <div style={{ marginBottom: '1rem' }}>
                 <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '0.35rem' }}>
@@ -190,6 +244,22 @@ export default function DashboardPage() {
                 </div>
                 <div className="hash-pill" style={{ width: '100%', wordBreak: 'break-all' }}>
                   {item.hash}
+                </div>
+              </div>
+
+              {/* Current Titleholder & Creator Details */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem', marginBottom: '1rem', background: 'rgba(0,0,0,0.2)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-sm)' }}>
+                <div>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Original Creator:</span>
+                  <div className="mono" style={{ fontSize: '0.8rem', color: item.isCreator ? '#34d399' : 'var(--text-secondary)' }}>
+                    {item.creator} {item.isCreator && '(You)'}
+                  </div>
+                </div>
+                <div>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Current Legal Titleholder:</span>
+                  <div className="mono" style={{ fontSize: '0.8rem', color: item.isOwner ? '#34d399' : '#fbbf24' }}>
+                    {item.owner} {item.isOwner && '(You)'}
+                  </div>
                 </div>
               </div>
 
@@ -204,11 +274,16 @@ export default function DashboardPage() {
               )}
 
               {/* IPFS Off-chain URI */}
-              <div style={{ marginBottom: '1rem', fontSize: '0.85rem' }}>
+              <div style={{ marginBottom: '1rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
                 <span style={{ color: 'var(--text-muted)' }}>IPFS Storage: </span>
                 <a href={item.gatewayURL} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-cyan)', textDecoration: 'none', fontWeight: 600 }}>
-                  {item.ipfsURI} ↗ (View payload in IPFS Gateway)
+                  View in Gateway ↗
                 </a>
+                <span style={{ color: 'var(--border-strong)' }}>|</span>
+                <a href={`${item.gatewayURL}?download=1`} download style={{ color: 'var(--accent-teal)', textDecoration: 'none', fontWeight: 600 }}>
+                  Download Original File ↓
+                </a>
+                <span className="mono" style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>({item.ipfsURI})</span>
               </div>
 
               {/* Licensing Terms */}
@@ -268,17 +343,38 @@ export default function DashboardPage() {
               </div>
 
               {/* Action Buttons */}
-              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', paddingTop: '1rem', borderTop: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', paddingTop: '1.25rem', borderTop: '1px solid var(--border-subtle)', alignItems: 'center' }}>
+                <a 
+                  href={`${item.gatewayURL}?download=1`} 
+                  download 
+                  className="btn btn-primary" 
+                  style={{ fontSize: '0.825rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Download Original File
+                </a>
+
+                <a 
+                  href={item.gatewayURL} 
+                  target="_blank" 
+                  rel="noreferrer" 
+                  className="btn btn-secondary" 
+                  style={{ fontSize: '0.825rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  View Gateway
+                </a>
+
                 <Link href={`/verify?hash=${item.hash}`} className="btn btn-secondary" style={{ fontSize: '0.825rem' }}>
                   <span>🔍</span> Public Audit Page
                 </Link>
 
                 {item.isOwner && (
                   <>
-                    <Link href={`/register?parent=${item.hash}`} className="btn btn-outline" style={{ fontSize: '0.825rem' }}>
-                      <span>↻</span> Publish Next Revision (v{item.version + 1})
+                    <Link href={`/register?parent=${item.hash}`} className="btn btn-outline" style={{ fontSize: '0.825rem', color: 'var(--accent-teal)', borderColor: 'var(--accent-teal)' }}>
+                      <span>↻</span> Publish Revision (v{item.version + 1})
                     </Link>
-                    <Link href={`/transfer?hash=${item.hash}`} className="btn btn-secondary" style={{ fontSize: '0.825rem' }}>
+                    <Link href={`/transfer?hash=${item.hash}`} className="btn btn-outline" style={{ fontSize: '0.825rem', color: 'var(--accent-purple)', borderColor: 'var(--accent-purple)' }}>
                       <span>⇄</span> Transfer Title
                     </Link>
                   </>
